@@ -26,7 +26,5 @@
     "vite": "^2.9.9"
   },
   "private": true,
-  "dependencies": {
-    "@googlemaps/markerclusterer": "2.0.10"
-  }
+  "dependencies": {}
 }

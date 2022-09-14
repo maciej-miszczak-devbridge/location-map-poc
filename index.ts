@@ -6,7 +6,7 @@
 
 let map: google.maps.Map;
 
-function initMap(): void {
+async function initMap(): Promise<void> {
   const center = new google.maps.LatLng(40, -93);
   map = new google.maps.Map(document.getElementById("map") as HTMLElement, {
     center: center,
@@ -102,37 +102,6 @@ function initMap(): void {
     "organization_id"
   );
 
-  function drawPieSlice(settings) {
-    let d = "";
-
-    const firstCircumferenceX =
-      settings.centreX + settings.radius * Math.sin(settings.startAngleRadians);
-    const firstCircumferenceY =
-      settings.centreY - settings.radius * Math.cos(settings.startAngleRadians);
-    const secondCircumferenceX =
-      settings.centreX +
-      settings.radius *
-        Math.sin(settings.startAngleRadians + settings.sweepAngleRadians);
-    const secondCircumferenceY =
-      settings.centreY -
-      settings.radius *
-        Math.cos(settings.startAngleRadians + settings.sweepAngleRadians);
-
-    // move to centre
-    d += "M" + settings.centreX + "," + settings.centreY + " ";
-    // line to first edge
-    d += "L" + firstCircumferenceX + "," + firstCircumferenceY + " ";
-    // arc
-    // Radius X, Radius Y, X Axis Rotation, Large Arc Flag, Sweep Flag, End X, End Y
-    d += `A ${settings.radius},${settings.radius} 0 ${
-      parseFloat(settings.sweepAngleRadians) >= Math.PI ? 1 : 0
-    },1 ${secondCircumferenceX},${secondCircumferenceY} `;
-    // close path
-    d += "Z";
-
-    return d;
-  }
-
   var locationMarkers: google.maps.Marker[] = [];
   var locationClusterMarkers: google.maps.Marker[] = [];
 
@@ -199,68 +168,96 @@ function initMap(): void {
 
   const stateKeys = Object.keys(states);
 
-  for (let i = 0; i < locationsNumber; i++) {
-    const state = stateKeys[getRandomInt(0, stateKeys.length - 1)];
+  if (organizationId === null) {
+    for (let i = 0; i < locationsNumber; i++) {
+      const state = stateKeys[getRandomInt(0, stateKeys.length - 1)];
 
-    if (states[state].locationCount === undefined) {
-      states[state].locationCount = 1;
-    } else {
-      states[state].locationCount += 1;
-    }
-    let latitude = states[state].latitude + getRandom(-1, 1);
-    let longitude = states[state].longitude + getRandom(-1, 1);
-    let covered = Math.random() < 0.5;
-    let size = getRandomInt(0, 3);
-    let data =
-      "R12: $ <b>xxxxx</b><br/>Covered<br/>Street<br/>City, state<br/>View Location";
+      if (states[state].locationCount === undefined) {
+        states[state].locationCount = 1;
+      } else {
+        states[state].locationCount += 1;
+      }
+      let latitude = states[state].latitude + getRandom(-1, 1);
+      let longitude = states[state].longitude + getRandom(-1, 1);
+      let covered = Math.random() < 0.5;
+      let size = getRandomInt(0, 3);
+      let data =
+        "R12: $ <b>xxxxx</b><br/>Covered<br/>Street<br/>City, state<br/>View Location";
 
-    const marker = new google.maps.Marker({
-      position: new google.maps.LatLng(latitude, longitude),
-      icon: icons[covered.toString()][size].rasterIcon,
-      map: map,
-      visible: false,
-      optimized: true,
-      state: state
-    });
-    locationMarkers.push(marker);
-    const infowindow = new google.maps.InfoWindow({
-      content: data
-    });
-    google.maps.event.addListener(marker, "click", function () {
-      infowindow.open(map, marker);
-    });
-  }
-  if (locationsNumber >= 10000) {
-    for (const state in states) {
-      const markerPosition = new google.maps.LatLng(
-        states[state].latitude,
-        states[state].longitude
-      );
-      var marker = new google.maps.Marker({
-        position: markerPosition,
-        icon: {
-          anchor: new google.maps.Point(33, 33),
-          url: "covered_cluster.png"
-        },
-        label: states[state].locationCount.toString(),
+      const marker = new google.maps.Marker({
+        position: new google.maps.LatLng(latitude, longitude),
+        icon: icons[covered.toString()][size].rasterIcon,
         map: map,
-        // optimized: true
+        visible: false,
+        optimized: true,
         state: state
       });
-      locationClusterMarkers.push(marker);
+      locationMarkers.push(marker);
+      const infowindow = new google.maps.InfoWindow({
+        content: data
+      });
       google.maps.event.addListener(marker, "click", function () {
-        map.setCenter(markerPosition);
-        map.setZoom(8);
-        locationClusterMarkers.forEach((marker) => marker.setVisible(false));
-        locationMarkers.forEach((marker) => {
-          if (marker.state === state) {
-            marker.setVisible(true);
-          }
-        });
+        infowindow.open(map, marker);
       });
     }
+    if (locationsNumber >= 10000) {
+      for (const state in states) {
+        const markerPosition = new google.maps.LatLng(
+          states[state].latitude,
+          states[state].longitude
+        );
+        var marker = new google.maps.Marker({
+          position: markerPosition,
+          icon: {
+            anchor: new google.maps.Point(33, 33),
+            url: "covered_cluster.png"
+          },
+          label: states[state].locationCount.toString(),
+          map: map,
+          // optimized: true
+          state: state
+        });
+        locationClusterMarkers.push(marker);
+        google.maps.event.addListener(marker, "click", function () {
+          map.setCenter(markerPosition);
+          map.setZoom(8);
+          locationClusterMarkers.forEach((marker) => marker.setVisible(false));
+          locationMarkers.forEach((marker) => {
+            if (marker.state === state) {
+              marker.setVisible(true);
+            }
+          });
+        });
+      }
+    } else {
+      locationMarkers.forEach((marker) => marker.setVisible(true));
+    }
   } else {
-    locationMarkers.forEach((marker) => marker.setVisible(true));
+    const response = await window.fetch(
+      `https://localhost/customer/customer-api/api-intelligence/v1/organizations/${organizationId}`,
+      {
+        method: "GET"
+      }
+    );
+
+    const { data, errors } = await response.json();
+    if (response.ok) {
+      const locations = data?.locations;
+      if (locations) {
+        locations.array.forEach((location) => {
+          console.log(
+            `Location ${location.id}: ${location.latitude}, ${location.longitude}`
+          );
+        });
+      } else {
+        return Promise.reject(new Error(`No locations`));
+      }
+    } else {
+      const error = new Error(
+        errors?.map((e) => e.message).join("\n") ?? "unknown"
+      );
+      return Promise.reject(error);
+    }
   }
 
   const legend = document.getElementById("legend") as HTMLElement;
